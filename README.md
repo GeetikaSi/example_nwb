@@ -22,7 +22,7 @@ To run the notebook:
 1. Clone the repository
 2. Run the cells of `motioncorrect_timestamp_errors.ipynb`
 3. You will first encounter Error II (i.e. the timestamp issue). This is because the there is no NWB MoitonCorrection object while processing the first plane.
-4. To bypass the timestamp issue, you can set `timestamp = timestamp[0]` [here]<https://github.com/GeetikaSi/example_nwb/blob/9556d27499040c781299fd8f8f6d17f64cae0c1a/motioncorrect_timestamp_errors.py#L222>.
+4. To bypass the timestamp issue, you can set `timestamp = timestamp[0]` [here](https://github.com/GeetikaSi/example_nwb/blob/9556d27499040c781299fd8f8f6d17f64cae0c1a/motioncorrect_timestamp_errors.py#L222).
 
 ### About the tiff file used:
 
