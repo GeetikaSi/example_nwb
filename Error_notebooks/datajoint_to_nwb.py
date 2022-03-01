@@ -1,5 +1,7 @@
 import os, sys
 import collections
+# sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+
 from datetime import datetime
 from dateutil.tz import tzlocal
 import pytz
@@ -8,6 +10,8 @@ import numpy as np
 import json
 import pandas as pd
 import pathlib
+
+# from imaging import analysis, preprocess, reference, equipment, tracking, analysis_param, sessions, animal, file, tif
 import pynwb
 from pynwb import NWBFile, NWBHDF5IO
 from pynwb import NWBFile, TimeSeries, NWBHDF5IO
@@ -21,8 +25,7 @@ zero_zero_time = datetime.strptime('00:00:00', '%H:%M:%S').time()  # no precise 
 institution = 'DataJoint - testing CorrectedImageStack'
 
 single_tiff_file = scanreader.read_scan('./k53_20160530_RSM_125um_41mW_zoom2p2_00001_00001.tif')
-add_tiff_file = scanreader.read_scan('./k53_20160530_RSM_125um_41mW_zoom2p2_00001_00001.tif')
-tiff_files = [single_tiff_file, add_tiff_file]
+tiff_file = scanreader.read_scan('./90853_3L_00001.tif')
 
 def get_nwb_subject(session_key):
     subj_key = {'animal_id': 'abc123', 'datasource_id': 0}
@@ -52,6 +55,8 @@ def export_to_nwb(session_key, output_dir='./', overwrite=True):
     # ============================== META INFORMATION ===============================
     # ===============================================================================
 
+    # -- NWB file - a NWB2.0 file for each session
+
     session = {'session_name': 'abc123d4fcbb',
                 'recording_order': 0,
                 'recording_name': 'rrrrd24',
@@ -69,6 +74,7 @@ def export_to_nwb(session_key, output_dir='./', overwrite=True):
          str(session['timeseries_name'])])
     nwbfile = NWBFile(
             identifier=file_name,
+            #TODO: Do we store publications anywhere in the database?
             related_publications='',
             experiment_description='',
             session_description='Imaging session',
@@ -76,6 +82,7 @@ def export_to_nwb(session_key, output_dir='./', overwrite=True):
             file_create_date=datetime.now(tzlocal()),
             experimenter='Test',
             institution=institution,
+            #TODO: Fetch keywords from database
             keywords=['Two-photon imaging'])
 
     # ==========================================================================
@@ -88,12 +95,19 @@ def export_to_nwb(session_key, output_dir='./', overwrite=True):
                                    description="",
                                    manufacturer=""
                                    )
-    nwbfile.subject = get_nwb_subject(session_key)
+
+    #TODO: Check optical channel
     optical_channel = OpticalChannel(name="OpticalChannel",
                                      description="an optical channel",
                                      emission_lambda=500.
                                      )
 
+    #TODO: Frame rate or volume rate == imaging rate?  Frame rate : 2D, volume rate : 3D (what to choose?)
+    nwbfile.subject = get_nwb_subject(session_key)
+    num_planes = tiff_file.num_scanning_depths
+    framerate = tiff_file.fps
+
+    # volume_rate = tiff_file.volume_rate
     plane_keys = [{'session_name': 'abc123d4fcbb',
                     'recording_order': 0,
                     'recording_name': 'rrrrd24',
@@ -103,7 +117,12 @@ def export_to_nwb(session_key, output_dir='./', overwrite=True):
                     'recording_order': 0,
                     'recording_name': 'rrrrd24',
                     'dataset_name': 'dddd280d',
-                    'center_plane': 1}]
+                    'center_plane': 1},
+                    {'session_name': 'abc123d4fcbb',
+                    'recording_order': 0,
+                    'recording_name': 'rrrrd24',
+                    'dataset_name': 'dddd280d',
+                    'center_plane': 2}]
 
     ophys_module = nwbfile.create_processing_module(name='ophys',
                                                     description='optical physiology processed data'
@@ -113,8 +132,6 @@ def export_to_nwb(session_key, output_dir='./', overwrite=True):
     roi_resp_series = []
     for plane, tiff_file in zip(plane_keys,tiff_files):
         print(plane)
-        num_planes = tiff_file.num_scanning_depths
-        framerate = tiff_file.fps
         imaging_plane = nwbfile.create_imaging_plane(name="ImagingPlane"+ '_' + str(plane['center_plane']),
                                                     optical_channel=optical_channel,
                                                     imaging_rate=framerate,
@@ -133,7 +150,8 @@ def export_to_nwb(session_key, output_dir='./', overwrite=True):
         # ---------------------------- Insert data file ----------------------------
         # ==========================================================================
 
-        file_path = np.array(['./k53_20160530_RSM_125um_41mW_zoom2p2_00001_00001.tif'])
+        #TODO: Should the files be combined here?
+        file_path = np.array(['./90853_3L_00001.tif'])
         image_series = TwoPhotonSeries(name='TwoPhotonSeries2'+'_'+str(plane['center_plane']),
                                         dimension=[100, 100],
                                         external_file=file_path,
@@ -149,10 +167,10 @@ def export_to_nwb(session_key, output_dir='./', overwrite=True):
         # --------------------- MotionCorrection information -----------------------
         # ==========================================================================
 
-        corrected = ImageSeries(name='corrected',  
+        corrected = ImageSeries(name='corrected',  # this must be named "corrected"
                                 data=np.ones((256,265,1000)),
                                 unit='na',
-                                format='Average projection of motion corrected stack - contrast enhanced (unwarped)', 
+                                format='Average projection of motion corrected stack - contrast enhanced (unwarped)', #TODO: Check format
                                 starting_time=0.0,
                                 rate=1.0
                                 )
@@ -178,48 +196,14 @@ def export_to_nwb(session_key, output_dir='./', overwrite=True):
         # ----------------------- Segmentation information -------------------------
         # ==========================================================================
 
+        #TODO: Explore option of creating a new processing module for segmentation
+
         ps = img_seg.create_plane_segmentation(name='PlaneSegmentation'+'_'+str(plane['center_plane']),
                                             description='output from segmenting the imaging plane',
                                             imaging_plane=imaging_plane,
                                             reference_images=image_series  # optional
                                             )
 
-        # ==========================================================================
-        # -------------- ROIs (Image masks, Pixel masks) information ---------------
-        # ==========================================================================
-
-        cell_ids = np.arange(1,170,1)
-        pixel_masks = []
-        for cell in cell_ids:
-            xpix_corr = np.random.randint(321, 340, 313)
-            ypix_corr = np.random.randint(268, 301, 313)
-            lambda_corr = np.random.uniform(low=0.001, high=0.02, size=(313,))
-            pixel_mask = list(zip(xpix_corr, ypix_corr, lambda_corr))
-            pixel_masks.append(pixel_mask)
-            ps.add_roi(pixel_mask=pixel_masks[0])
-
-        # ==========================================================================
-        # ----------------------- Flourescence information -------------------------
-        # ==========================================================================
-
-        raw_fluo_traces = np.random.random((26100, 170))
-
-        timestamps = np.random.random((26100, 170))
-        timestamps = np.vstack(timestamps)
-        raw_fluo_traces = np.vstack(raw_fluo_traces).T
-        timestamps = np.vstack(timestamps).T
-
-        roi_region = ps.create_roi_table_region(region=list(range(len(cell_ids))),
-                                                description='list of ROIs'
-                                                )
-
-        # TODO: Can timestamps be stored as an 2d array instead of just 1D
-        roi_resp_series.append(RoiResponseSeries(name='RawfluorescenceResponseSeries'+'_'+str(plane['center_plane']),
-                                            data=raw_fluo_traces,
-                                            description='Raw fluorescence trace',
-                                            rois=roi_region,
-                                            unit='a.u.',
-                                            timestamps=timestamps))
 
     motion_correction = MotionCorrection(corrected_image_stacks=corrected_image_stacks)
     ophys_module.add(motion_correction)
